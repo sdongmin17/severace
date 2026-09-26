@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>퇴직금 & 퇴직소득세 계산기</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background-color: #f4f6f8; color: #333; padding: 20px 10px; }
+    .container { max-width: 480px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { font-size: 1.3rem; margin-bottom: 20px; text-align: center; }
+    
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px; }
+    .input-box { display: flex; align-items: center; border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; }
+    .input-box input { width: 100%; border: none; outline: none; font-size: 1rem; }
+    .unit { font-size: 0.9rem; color: #666; margin-left: 5px; white-space: nowrap; }
+    
+    .calc-btn { width: 100%; padding: 12px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    
+    .result-box { display: none; margin-top: 20px; padding: 15px; background: #f0f7ff; border-radius: 8px; border: 1px solid #cce3ff; }
+    .result-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.95rem; }
+    .result-row:last-child { margin-bottom: 0; }
+    .highlight { font-weight: bold; color: #2563eb; }
+    
+    .info-text { font-size: 0.8rem; color: #666; margin-top: 10px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>퇴직금 & 실수령액 계산기</h1>
+
+    <!-- 입사일 -->
+    <div class="form-group">
+      <label>입사일</label>
+      <div class="input-box">
+        <input type="date" id="join-date">
+      </div>
+    </div>
+
+    <!-- 퇴사일 -->
+    <div class="form-group">
+      <label>퇴사일 (마지막 근무일 다음날)</label>
+      <div class="input-box">
+        <input type="date" id="leave-date">
+      </div>
+    </div>
+
+    <!-- 최근 3개월 총급여 -->
+    <div class="form-group">
+      <label>퇴직 전 3개월간 기본급 총액 (비과세 제외)</label>
+      <div class="input-box">
+        <input type="number" id="salary-3m" placeholder="예: 900 (월 300만원인 경우)">
+        <span class="unit">만원</span>
+      </div>
+    </div>
+
+    <!-- 연간 상여금 총액 -->
+    <div class="form-group">
+      <label>최근 1년간 상여금 총액</label>
+      <div class="input-box">
+        <input type="number" id="bonus-1y" placeholder="없으면 0" value="0">
+        <span class="unit">만원</span>
+      </div>
+    </div>
+
+    <button class="calc-btn" onclick="calculate()">퇴직금 계산하기</button>
+
+    <!-- 결과 화면 -->
+    <div class="result-box" id="result">
+      <div class="result-row">
+        <span>총 재직일수</span>
+        <span id="val-days">0 일</span>
+      </div>
+      <div class="result-row">
+        <span>1일 평균임금</span>
+        <span id="val-avg-daily">0 원</span>
+      </div>
+      <div class="result-row">
+        <span>예상 퇴직금 (세전)</span>
+        <span id="val-gross">0 원</span>
+      </div>
+      <div class="result-row">
+        <span>예상 퇴직소득세 (약식)</span>
+        <span id="val-tax">0 원</span>
+      </div>
+      <div class="result-row">
+        <span>최종 퇴직금 실수령액</span>
+        <span class="highlight" id="val-net">0 원</span>
+      </div>
+    </div>
+
+    <p class="info-text">
+      * 근로기준법상 퇴직금 = 1일 평균임금 × 30일 × (재직일수 ÷ 365)<br>
+      * 1일 평균임금 = (퇴직 전 3개월간 임금 총액 + 연간 상여금/4) ÷ 3개월간 총 일수(약 90~92일)<br>
+      * 퇴직소득세는 근속연수 공제 및 연근충당 과세표준 구간에 따라 개략적으로 산출된 금액입니다.
+    </p>
+  </div>
+
+  <script>
+    function calculate() {
+      const joinStr = document.getElementById('join-date').value;
+      const leaveStr = document.getElementById('leave-date').value;
+      const salary3m = parseFloat(document.getElementById('salary-3m').value);
+      const bonus1y = parseFloat(document.getElementById('bonus-1y').value) || 0;
+
+      if (!joinStr || !leaveStr || isNaN(salary3m)) {
+        alert('입사일, 퇴사일 및 3개월 임금을 정확히 입력해 주세요.');
+        return;
+      }
+
+      const d1 = new Date(joinStr);
+      const d2 = new Date(leaveStr);
+
+      if (d2 <= d1) {
+        alert('퇴사일은 입사일보다 이후여야 합니다.');
+        return;
+      }
+
+      // 재직일수 계산
+      const diffTime = Math.abs(d2 - d1);
+      const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (totalDays < 365) {
+        alert('근속기간이 1년(365일) 미만인 경우 법정 퇴직금 지급 대상이 아닙니다.');
+        return;
+      }
+
+      // 3개월간 총 일수 (평균 91일 적용)
+      const daysIn3m = 91;
+
+      // 1일 평균임금 계산 = (3개월 급여 + 상여금*3/12) / 91일
+      const salary3mWon = salary3m * 10000;
+      const bonus3mWon = (bonus1y * 10000) * (3 / 12);
+      const avgDailyPay = (salary3mWon + bonus3mWon) / daysIn3m;
+
+      // 법정 퇴직금 = 1일 평균임금 * 30 * (재직일수 / 365)
+      const grossSeverance = Math.round(avgDailyPay * 30 * (totalDays / 365));
+
+      // 근속연수
+      const years = Math.ceil(totalDays / 365);
+
+      // 약식 퇴직소득세 계산 (근속연수 공제 + 세율 반영)
+      let serviceDeduction = 0;
+      if (years <= 5) serviceDeduction = years * 1000000;
+      else if (years <= 10) serviceDeduction = 5000000 + (years - 5) * 2000000;
+      else if (years <= 20) serviceDeduction = 15000000 + (years - 10) * 2500000;
+      else serviceDeduction = 40000000 + (years - 20) * 3000000;
+
+      // 환산급여 계산
+      const taxBase = Math.max(0, grossSeverance - serviceDeduction);
+      const convertedTaxBase = (taxBase / years) * 12;
+
+      // 실효세율 산정 약식 (약 3~12% 수준의 실효세율 적용)
+      let approxTaxRate = 0.05;
+      if (convertedTaxBase > 100000000) approxTaxRate = 0.12;
+      else if (convertedTaxBase > 50000000) approxTaxRate = 0.08;
+      else if (convertedTaxBase > 20000000) approxTaxRate = 0.06;
+
+      const approxTax = Math.round(taxBase * approxTaxRate);
+      const netSeverance = grossSeverance - approxTax;
+
+      document.getElementById('val-days').innerText = totalDays.toLocaleString() + ' 일 (' + years + '년차)';
+      document.getElementById('val-avg-daily').innerText = Math.round(avgDailyPay).toLocaleString() + ' 원';
+      document.getElementById('val-gross').innerText = grossSeverance.toLocaleString() + ' 원';
+      document.getElementById('val-tax').innerText = approxTax.toLocaleString() + ' 원';
+      document.getElementById('val-net').innerText = netSeverance.toLocaleString() + ' 원';
+      document.getElementById('result').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
